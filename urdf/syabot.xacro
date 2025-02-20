@@ -1,0 +1,49 @@
+<?xml version="1.0" ?>
+<robot name="staubli_tx2_90" xmlns:xacro="http://wiki.ros.org/xacro">
+  <xacro:include filename="$(find staubli_tx2_90_support)/urdf/tx2_90_macro.xacro"/>
+  <xacro:staubli_tx2_90 prefix=""/>
+  <!-- Tool -->
+  <link name="tool">
+    <visual>
+      <origin xyz="0.08 0.0 -0.16" rpy="0 0 0"/>
+      <geometry>
+	<cylinder radius=".04" length=".02" />
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.08 0.0 -0.08" rpy="0 0 0"/>
+      <geometry>
+	<cylinder radius=".02" length=".15" />
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.075 0.0 0.0" rpy="0 1.5708 0"/>
+      <geometry>
+	<cylinder radius=".05" length=".15" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.08 0.0 -0.16" rpy="0 0 0"/>
+      <geometry>
+	<cylinder radius=".04" length=".02" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.08 0.0 -0.08" rpy="0 0 0"/>
+      <geometry>
+	<cylinder radius=".02" length=".15" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.075 0.0 0.0" rpy="0 1.5708 0"/>
+      <geometry>
+	<cylinder radius=".05" length=".15" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="tool_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="flange"/>
+    <child link="tool"/>
+  </joint>
+</robot>

@@ -112,23 +112,24 @@ public:
   }
 
 protected:
-  Product(const PathPtr_t& p1, const PathPtr_t& p2) : Path(p1->paramRange(), 7, 6), p1_(p1),
-      p2_(p2), T2_over_T1_(p2->length()/p1->length())
+  Product(const PathPtr_t& p1, const PathPtr_t& p2) : Path(std::make_pair(0, p1->length()), 7, 6),
+      p1_(p1), p2_(p2)
   {
     assert(p1->length() > 0);
     assert(p1->outputSize() == 7);
     assert(p1->outputDerivativeSize() == 6);
     assert(p2->outputSize() == 7);
     assert(p2->outputDerivativeSize() == 6);
+    assert(fabs(p2->length() - p1->length()) < 1e-7);
   }
 
-  Product(const Product& p) : Path(p), p1_(p.p1_), p2_(p.p2_), T2_over_T1_(p.T2_over_T1_)
+  Product(const Product& p) : Path(p), p1_(p.p1_), p2_(p.p2_)
   {
   }
 
   /// Copy constructor with constraints
   Product(const Product& p, const ConstraintSetPtr_t& constraints) : Path(p, constraints),
-      p1_(p.p1_), p2_(p.p2_), T2_over_T1_(p.T2_over_T1_)
+      p1_(p.p1_), p2_(p.p2_)
   {
   }
 
@@ -143,8 +144,8 @@ protected:
   virtual bool impl_compute(ConfigurationOut_t configuration, value_type param) const
   {
     vector7_t v1, v2;
-    if (!p1_->eval(v1, param)) return false;
-    if (!p2_->eval(v2, param * T2_over_T1_)) return false;
+    if (!p1_->eval(v1, param + p1_->timeRange().first)) return false;
+    if (!p2_->eval(v2, param + p2_->timeRange().first)) return false;
     computeSE3Product(v1, v2, configuration);
     return true;
   }
@@ -157,7 +158,6 @@ protected:
 private:
   ProductWkPtr_t weak_;
   PathPtr_t p1_, p2_;
-  value_type T2_over_T1_;
 }; // class Product
 
 Path::Path() : robot_(pinocchio::Device::create("")), sm1_(), sm3_()
@@ -190,10 +190,10 @@ PathPtr_t Path::createSpline(ConfigurationIn_t pose0, ConfigurationIn_t pose1, v
   switch(order) {
   case 0:
     // Linear interpolation
-    return sm1_->steer(pose0, empty, emptyDeriv, pose1, empty, emptyDeriv, length);
+    return sm1_->steer(pose0, empty, emptyDeriv, pose1, empty, emptyDeriv, length, true);
   case 1:
     // cubic spline with zero derivatives at beginning and end
-    return sm3_->steer(pose0, one, zeroDeriv, pose1, one, zeroDeriv, length);
+    return sm3_->steer(pose0, one, zeroDeriv, pose1, one, zeroDeriv, length, true);
     break;
   default:
     std::ostringstream oss;

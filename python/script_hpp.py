@@ -33,6 +33,7 @@ from hpp.corbaserver.manipulation import ConstraintGraph, ConstraintGraphFactory
 from hpp.gepetto.manipulation import ViewerFactory
 from cartesian_trajectory import CartesianTrajectory
 from trajectory_generator import centerAxes4and6, TrajectoryGenerator
+from solver import Solver
 from hpp.corbaserver.coverage import Client as CovClient
 
 class Part:
@@ -80,27 +81,9 @@ for i in range(1000):
 
 tg = TrajectoryGenerator(ps, cg)
 # eep1 is a linear path of the end effector that follows the cylinder
-eep1 = tg.straightCircle(q2)
+eep1 = tg.coverRectangle(q2,10)
 
-ct = tg.cartesianTrajectory
-cov = CovClient()
-
-pose_0 = [0,0,0,0,0,0,1]
-pose_1 = [0,0,0,sin(pi/8),0,0,cos(pi/8)]
-
-eep2 = cov.path.createSpline(pose_0, pose_1, eep1.length(), 0)
-
-# Rotate tool around x-axis at beginning of end-effector path
-eep3 = cov.path.multiply(eep2, eep1)
-
-ct.steeringMethod.trajectory(eep3, True)
-eec = ps.client.basic.problem.getConstraint("staubli/tooltip follows target")
-ct.configProjector.setRightHandSideFromConfig(q0)
-ct.configProjector.setRightHandSideOfConstraint(eec, eep3.initial())
-res3, q3 = ct.configProjector.apply(q2)
-ct.configProjector.setRightHandSideOfConstraint(eec, eep3.end())
-res4, q4 = ct.configProjector.apply(q2)
-p1 = ct.computePath(q3, q4)
-if p1:
-    ps.client.basic.problem.addPath(p1.asVector())
+solver = Solver(ps, cg)
+p = solver.compute(q2, eep1)
+eep1.deleteThis()
 

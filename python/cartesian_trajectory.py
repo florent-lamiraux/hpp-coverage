@@ -64,9 +64,9 @@ class CartesianTrajectory:
         self.constraintSet.addConstraint(self.configProjector)
         self.newProblem.setConstraints(self.constraintSet)
         self.newProblem.setSteeringMethod(self.steeringMethod)
+        self.cdistance = self.wd(self.newProblem.getDistance())
         self.croadmap = self.wd(self.ps.client.basic.problem.createRoadmap(
-            self.wd(self.newProblem.getDistance()),
-            self.crobot))
+            self.cdistance, self.crobot))
         self.pathPlanner = self.wd(self.ps.client.basic.problem.createPathPlanner(
             self.pathPlannerType, self.newProblem, self.croadmap)
         )

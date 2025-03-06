@@ -25,7 +25,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from math import sqrt, cos, sin, pi
-from cartesian_trajectory import CartesianTrajectory
+from hpp.corbaserver.coverage import Client as CovClient
 
 def centerAxes4and6(robot, q):
     """
@@ -40,10 +40,13 @@ def centerAxes4and6(robot, q):
     
 class TrajectoryGenerator:
 
+    linVel = .1
+    """Linear velocity of the tool"""
+
     def __init__(self, ps, cg):
         self.ps = ps
         self.cg = cg
-        self.cartesianTrajectory = CartesianTrajectory(ps, cg)
+        self.client = CovClient()
 
     def straightCircle(self, q2):
         """
@@ -51,15 +54,15 @@ class TrajectoryGenerator:
 
         q2 is a configuration in contact with the part and that defines the pose of the part.
         """
-        ct = self.cartesianTrajectory
-
-        a0 = pi/10
-        a1 = -pi/10
+        angle = pi/10
+        a0 = angle
+        a1 = -angle
         r = .5
+        t = 2*r*angle/self.linVel
         rhs0 = [r*(1-cos(a0)), r*sin(a0), 0, 0, 0, -sin(a0/2), cos(a0/2)]
         rhs1 = [r*(1-cos(a1)), r*sin(a1), 0, 0, 0, -sin(a1/2), cos(a1/2)]
 
-        p = ct.steeringMethod.makePiecewiseLinearTrajectory([rhs0, rhs1],6*[1.])
+        p = self.client.path.createSpline(rhs0, rhs1, t, 0)
         return p
         
     def coverRectangle(self, q2, n):
@@ -69,31 +72,34 @@ class TrajectoryGenerator:
 
         q2 is a configuration in contact with the part and that defines the pose of the part.
         """
-        ct = self.cartesianTrajectory
-
-        a0 = pi/16
-        a1 = -pi/16
+        angle = pi/10
+        a0 = angle
+        a1 = -angle
         r = .5
+        t = 2*r*angle/self.linVel
         rhs0 = [r*(1-cos(a0)), r*sin(a0), -0.01, 0, 0, -sin(a0/2), cos(a0/2)]
         rhs1 = [r*(1-cos(a1)), r*sin(a1), -0.01, 0, 0, -sin(a1/2), cos(a1/2)]
 
         p = None
         for i in range(n):
-            p1 = ct.steeringMethod.makePiecewiseLinearTrajectory([rhs0, rhs1],6*[1.])
+            p1 = self.client.path.createSpline(rhs0, rhs1, t, 0)
             if not p:
-                p = p1
+                p = p1.asVector()
             else:
-                p.concatenate(p1)
-            rhs2 = rhs1[:]; rhs2[2] += .002
-            rhs3 = rhs0[:]; rhs3[2] += .002
-            p1 = ct.steeringMethod.makePiecewiseLinearTrajectory([rhs1, rhs2],6*[1.])
-            p.concatenate(p1); p1.deleteThis()
-            p1 = ct.steeringMethod.makePiecewiseLinearTrajectory([rhs2, rhs3],6*[1.])
-            p.concatenate(p1); p1.deleteThis()
+                p.appendPath(p1)
+            p1.deleteThis()
+            dy = .002
+            ty = dy/self.linVel
+            rhs2 = rhs1[:]; rhs2[2] += dy
+            rhs3 = rhs0[:]; rhs3[2] += dy
+            p1 = self.client.path.createSpline(rhs1, rhs2, ty, 0)
+            p.appendPath(p1); p1.deleteThis()
+            p1 = self.client.path.createSpline(rhs2, rhs3, t, 0)
+            p.appendPath(p1); p1.deleteThis()
             rhs0[2] += 0.004
             rhs1[2] += 0.004
-            p1 = ct.steeringMethod.makePiecewiseLinearTrajectory([rhs3, rhs0],6*[1.])
-            p.concatenate(p1); p1.deleteThis()
+            p1 = self.client.path.createSpline(rhs3, rhs0, ty, 0)
+            p.appendPath(p1); p1.deleteThis()
 
         return p
 

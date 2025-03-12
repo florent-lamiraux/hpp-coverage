@@ -32,27 +32,43 @@ from hpp_idl.hpp import Error
 from cartesian_trajectory import CartesianTrajectory
 from hpp.corbaserver.coverage import Client as CovClient
 
-import logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(filename='solver.log', filemode='w', level=logging.INFO)
+class NoLogger:
+    def info(self, msg):
+        pass
+
+logging = False
+
+if logging:
+    import logging
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(filename='solver.log', filemode='w', level=logging.INFO)
+else:
+    logger = NoLogger()
+
 
 class Solver:
 
-    nOrientations = 8
+    nRotations = 8
     """ Number of tool orientations along symmetry axis"""
     segmentTime = 2
     """ The input path is segmented in intervals of this length over which an orientation
         multiplyer is applied.
     """
+    distanceThreshold = 1e-4
+    """ Distance between configurations below which two configurations are assumed to be equal
+    """
+    orientationCoeff = 10
+    """ coefficient of the change of orientation in the cost
+    """
     def wd(self, o):
         """! Wrapper to the wrap_delete method
-        Automatically deletes the corresponding servant object on the server when 
+        Automatically deletes the corresponding servant object on the server when
         the Python object is deleted.
-        
+
         @param o CORBA object
         """
         return wrap_delete(o, self.ps.client.basic._tools)
-    
+
     def __init__(self, ps, cg):
         self.ps = ps
         self.robot = ps.robot
@@ -62,10 +78,22 @@ class Solver:
         self.client = CovClient()
         self.problem = self.wd(self.ps.hppcorba.problem.createProblem(self.ct.crobot))
         self.distance = self.wd(self.problem.getDistance())
+        self.steeringMethod = self.wd(self.problem.getSteeringMethod())
         self.roadmap = self.wd(self.ps.client.basic.problem.createRoadmap(
             self.distance, self.ct.crobot))
         self.pathPlanner = self.wd(self.ps.client.basic.problem.createPathPlanner("SearchInRoadmap",
             self.problem, self.roadmap))
+
+    def clearRoadmap(self):
+        self.roadmap.clear()
+        # maps the origin of the path that leads to each node
+        self.origin = dict()
+        # maps the travel time from trajectory start to each node
+        self.cost = dict()
+        # track initial configuration of path that leads to each node
+        self.origin = dict()
+        # store configuration in a radius corresponding to the numerical threshold
+        self.near = dict()
 
     def computeInitialConfigs(self, toolRotation, toolPose, q0):
         """Compute inverse kinematics solutions for a given tool pose with reorientation
@@ -96,7 +124,8 @@ class Solver:
         return configs
 
     def compute(self, q0, tooltipTraj):
-        res = self.tryConstantOrientations(q0, tooltipTraj)
+        self.clearRoadmap()
+        res = self.graphSearch(q0, tooltipTraj)
         if res :
             qInit, qGoal = res
             logger.info(f"qInit={qInit}")
@@ -106,65 +135,121 @@ class Solver:
             self.problem.addGoalConfig(qGoal)
             p = self.pathPlanner.solve()
             return p
-        
-    def tryConstantOrientations(self, q0, tooltipTraj):
-        """
-        Compute a robot path given the tooltip trajectory as input
 
-        q0 defines the pose of the part
+    def addNodeAndEdge(self, q0, q1, p):
         """
-        n = self.nOrientations
+        Add a new node and an edge to the roadmap between an existing node and the new one
+
+          intput:
+            - q0: existing node,
+            - q1: new node,
+            - p:  path between q0 and q1.
+          return:
+            - q1, True if q1 was already in the roadmap (up to distance threshold),
+            - q_near, False otherwise, where q_near is the closest node in the roadmap to q1
+
+          note: if q1 is very close to an existing node of the roadmap, an edge is inserted
+                q1 and the existing node with a straight path between them.
+        """
+        q_near, d = self.roadmap.nearestNode(q1, False); q_near = tuple(q_near)
+        if d < self.distanceThreshold:
+            # When several nodes are close to each other, always take the same as nearest node
+            if q_near in self.near:
+                self.near[tuple(q1)] = self.near[q_near]
+                q_near = self.near[tuple(q1)]
+            else:
+                self.near[tuple(q1)] = q_near
+            assert(q_near in self.cost)
+            p1 = self.steeringMethod.call(q1, q_near)
+            assert(p)
+            self.roadmap.addNodeAndEdge(q0, q1, p)
+            self.roadmap.addNodeAndEdges(q1, q_near, p1)
+            p1.deleteThis()
+            return q_near, False
+        else:
+            self.roadmap.addNodeAndEdge(q0, q1, p)
+            return q1, True
+
+    def graphSearch(self, q0, tooltipTraj):
+        """
+        Build and explore a roadmap with Dijkstra's algorithm.
+
+        the cost to go for each node is the sum of the time with the number of orientation changes
+        """
+        n = self.nRotations
         toolRotations = [[0,0,0,sin(i*pi/n), 0, 0, cos(i*pi/n)] for i in range(n)]
-        # First try a straight line for each orientation
-        for toolRotation in toolRotations:
+        # list of triples (configuration, index of tool orientation, time)
+        unvisited = list()
+        # Generate initial configurations for each orientation
+        for i, toolRotation in enumerate(toolRotations):
             # Generate all inverse kinematics solutions for initial tool pose
             qInits = self.computeInitialConfigs(toolRotation, tooltipTraj.initial(), q0)
             logger.info(f"Generated {len(qInits)} collision free configurations for toolRotation {toolRotation}")
-            # Cut the tooltip path into segments of predefined time length.
-            remainingTime = tooltipTraj.length()
-            t0 = 0.
-            lastSegment = False; plannerFailed = False
-            qInitsSegment = qInits[:]
-            origin = dict()
-            while remainingTime > 0 and not plannerFailed:
-                qEnds = list()
-                if remainingTime > self.segmentTime:
-                    toolTraj0 = tooltipTraj.extract(t0, t0 + self.segmentTime)
-                    t0 += self.segmentTime
-                    remainingTime -= self.segmentTime
-                else:
-                    toolTraj0 = tooltipTraj.extract(t0, tooltipTraj.length())
-                    remainingTime = 0; lastSegment = True
-                
-                # create a constant multiplyer in SE(3) with the current orientation
-                reorient = self.client.path.createSpline(toolRotation, toolRotation,
-                                                         toolTraj0.length(), 0)
-                toolTraj = self.client.path.multiply(reorient, toolTraj0)
-                self.ct.steeringMethod.trajectory(toolTraj, True)
-                for qInit in qInitsSegment:
-                    qInit = tuple(qInit)
+            unvisited += [(tuple(q), i, 0) for q in qInits]
+            for q in qInits:
+                self.cost[tuple(q)] = 0
+                self.roadmap.addNode(q)
+        finished = False
+        nIter = 0
+        while not finished:
+            for q0, i0, t0 in unvisited:
+                # try constant and 2 neighboring orientations
+                for i1 in range(i0-1,i0+2):
+                    # set i1 between 0 and len(toolRotations)-1
+                    if i1 < 0: i1 += len(toolRotations)
+                    if i1 >= len(toolRotations): i1-=len(toolRotations)
+                    # foreach new orientation, generate to tool trajectory
+                    t1 = t0 + self.segmentTime
+                    reachedEnd = False
+                    if t1 >= tooltipTraj.length():
+                        t1 = tooltipTraj.length()
+                        reachedEnd = True
+                    # extract the relevant sub-interval of the tooltip trajectory
+                    toolTraj0 = tooltipTraj.extract(t0, t1)
+                    # create a varying multiplyer in SE(3) from orientation i0 to orientation i1
+                    tr0 = toolRotations[i0]; tr1 = toolRotations[i1]
+                    reorient = self.client.path.createSpline(tr0, tr1, toolTraj0.length(), 1)
+                    toolTraj = self.client.path.multiply(reorient, toolTraj0)
+                    self.ct.steeringMethod.trajectory(toolTraj, True)
                     # Generate a possible end configuration for this tool motion
                     self.cp.setRightHandSideOfConstraint(self.ct.trajectoryConstraint,
                                                          toolTraj.end())
-                    res, qEnd = self.cp.apply(qInit)
-                    if not res: continue
+                    reorient.deleteThis(); toolTraj0.deleteThis(); toolTraj.deleteThis()
+                    res, q1 = self.cp.apply(q0)
+                    if not res:
+                        logger.info(f"Failed to project {q0}")
+                        logger.info(f"Projection stopped at {q1}")
+                        continue
+                    # compute path of robot
                     try:
-                        p = self.ct.computePath(qInit, qEnd)
-                        qEnd = tuple(p.end())
+                        p = self.ct.computePath(q0, q1)
+                        q1 = tuple(p.end())
                         self.ps.client.basic.problem.addPath(p)
-                        self.roadmap.addNodeAndEdge(qInit, qEnd, p)
-                        qEnds.append(qEnd)
-                        if not qInit in origin:
-                            origin[qEnd] = qInit
-                        else:
-                            origin[qEnd] = origin[qInit]
-                        if lastSegment: return (origin[qEnd], qEnd)
+                        q1, new = self.addNodeAndEdge(q0, q1, p)
                         p.deleteThis()
+                        logger.info(f"Added edge between {q0}")
+                        logger.info(f"               and {q1}")
+                        if reachedEnd:
+                            return self.origin[q0], q1
+                        cost1 = self.cost[q0] + (t1-t0) + self.orientationCoeff * abs(i1-i0)
+                        if new:
+                            unvisited.append((q1, i1, t1))
+                            self.cost[q1] = cost1
+                            self.origin[q1] = self.origin[q0] if q0 in self.origin else q0
+                        elif self.cost[q1] > cost1:
+                            # if the node already exist with a higher cost, update cost
+                            # and origin
+                            self.cost[q1] = cost1
+                            self.origin[q1] = self.origin[q0] if q0 in self.origin else q0
                     except Error as exc:
                         # Stop search for current orientation
-                        logger.info(f"Planner failed: {exc}")
-                        plannerFailed = True
-                qInitsSegment = qEnds[:]
-                reorient.deleteThis()
-                toolTraj0.deleteThis()
-        return None
+                        logger.info(f"Planner failed between {q0}")
+                        logger.info(f"                   and {q1}")
+                        continue
+                    if finished: break
+                if finished: break
+                # sort unvisited in increasing cost
+                unvisited.remove((q0, i0, t0))
+                unvisited.sort(key = lambda x:self.cost[x[0]])
+            nIter += 1
+        # end while not finished

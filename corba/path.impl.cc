@@ -29,7 +29,10 @@
 #include <hpp/common-idl.hh>
 #include <hpp/corbaserver/servant-base.hh>
 #include <hpp/corbaserver/conversions.hh>
+#include <hpp/pinocchio_idl/robots-fwd.hh>
 #include <hpp/core_idl/paths-fwd.hh>
+#include <hpp/core_idl/path_planners-fwd.hh>
+#include <hpp/coverage/cost.hh>
 #include <../corba/path.impl.hh>
 #include <../corba/path.hh>
 
@@ -97,6 +100,25 @@ hpp::core_idl::Path_ptr Path::createSpline(const floatSeq& pose0, const floatSeq
     throw hpp::Error(exc.what());
   }
 }
+
+void Path::setCost(::hpp::core_idl::Roadmap_ptr roadmap,
+		   ::hpp::pinocchio_idl::Device_ptr robot, const char* gripperName)
+{
+  core::RoadmapPtr_t _roadmap;
+  try {
+    _roadmap = corbaServer::reference_to_object<core::Roadmap>(server_->parent(), roadmap);
+  } catch (const hpp::Error& e) {
+    throw std::runtime_error("Failed to get pointer to roadmap in Path::setCost");
+  }
+  pinocchio::DevicePtr_t _robot;
+  try {
+    _robot = corbaServer::reference_to_object<pinocchio::Device>(server_->parent(), robot);
+  } catch (const hpp::Error& e) {
+    throw std::runtime_error("Failed to get pointer to robot in Path::setCost");
+  }
+  _roadmap->cost(coverage::ToolRotation::create(_robot, gripperName));
+}
+
 } // namespace impl
 } // namespace coverage
 } // namespace hpp

@@ -1,5 +1,5 @@
-// Copyright (c) 2025, LAAS-CNRS
-// Authors: Florent Lamiraux
+// Copyright (c) 2025 CNRS
+// Author: Florent Lamiraux
 //
 
 // Redistribution and use in source and binary forms, with or without
@@ -26,37 +26,42 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-#ifndef HPP_COVERAGE_CORBA_COVERAGE_IMPL_HH
-#define HPP_COVERAGE_CORBA_COVERAGE_IMPL_HH
+#include <hpp/coverage/cost.hh>
+#include <pinocchio/algorithm/frames.hpp>
+#include <pinocchio/spatial/explog.hpp>
+#include <hpp/pinocchio/device.hh>
 
-#include <corba/path-idl.hh>
-#include <hpp/manipulation/fwd.hh>
-#include <hpp/coverage/path.hh>
+namespace hpp{
+namespace coverage{
 
-namespace hpp {
-namespace coverage {
-class Server;
-namespace impl {
+  typedef pinocchio::Configuration_t Configuration_t;
+  typedef pinocchio::matrix3_t matrix3_t;
+  typedef pinocchio::vector3_t vector3_t;
+  
+  ToolRotationPtr_t ToolRotation::create(const DevicePtr_t& robot, const std::string& gripperName)
+  {
+    return ToolRotationPtr_t(new ToolRotation(robot, gripperName));
+  }
 
-class Path : public virtual POA_hpp::corbaserver::coverage::Path
-{
-public:
-  Path();
-  void setServer(Server* server) { server_ = server; }
+  ToolRotation::ToolRotation(const DevicePtr_t& robot, const std::string& gripperName) :
+    robot_(robot), frameId_(robot->model().getFrameId(gripperName)), data_(robot->model()),
+    wd_(core::WeighedDistance::create(robot))
+  {
+  }
 
-  virtual hpp::core_idl::Path_ptr multiply(hpp::core_idl::Path_ptr p1,
-					   hpp::core_idl::Path_ptr p2);
+  value_type ToolRotation::eval(const PathConstPtr_t& path)
+  {
+    Configuration_t q1(path->initial());
+    Configuration_t q2(path->end());
 
-  virtual hpp::core_idl::Path_ptr createSpline(const floatSeq& pose0, const floatSeq& pose1,
-					       CORBA::Double length, CORBA::ULong order);
-  virtual void setCost(::hpp::core_idl::Roadmap_ptr roadmap,
-		       ::hpp::pinocchio_idl::Device_ptr robot, const char* gripperName);
-private:
-  Server* server_;
-  hpp::coverage::Path path_;
-}; // class Coverage
-} // namespace impl
+    ::pinocchio::framesForwardKinematics(robot_->model(), data_, q1);
+    matrix3_t R1(data_.oMf[frameId_].rotation());
+    ::pinocchio::framesForwardKinematics(robot_->model(), data_, q2);
+    matrix3_t R2(data_.oMf[frameId_].rotation());
+    value_type theta;
+    matrix3_t R(R1.inverse() * R2);
+    vector3_t omega(::pinocchio::log3(R, theta));
+    return 1e-3 * (*wd_)(q1, q2) + fabs(omega[0]);
+  }
 } // namespace coverage
 } // namespace hpp
-
-#endif // HPP_COVERAGE_CORBA_COVERAGE_IMPL_HH

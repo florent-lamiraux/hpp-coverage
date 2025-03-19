@@ -81,6 +81,7 @@ class Solver:
         self.steeringMethod = self.wd(self.problem.getSteeringMethod())
         self.roadmap = self.wd(self.ps.client.basic.problem.createRoadmap(
             self.distance, self.ct.crobot))
+        self.client.path.setCost(self.roadmap, self.ct.crobot, "staubli/tooltip")
         self.pathPlanner = self.wd(self.ps.client.basic.problem.createPathPlanner("SearchInRoadmap",
             self.problem, self.roadmap))
 
@@ -189,9 +190,9 @@ class Solver:
             for q in qInits:
                 self.cost[tuple(q)] = 0
                 self.roadmap.addNode(q)
-        finished = False
-        nIter = 0
-        while not finished:
+        # list of final configurations reached
+        solutions = list()
+        while len(unvisited) > 0:
             for q0, i0, t0 in unvisited:
                 # try constant and 2 neighboring orientations
                 for i1 in range(i0-1,i0+2):
@@ -229,11 +230,10 @@ class Solver:
                         p.deleteThis()
                         logger.info(f"Added edge between {q0}")
                         logger.info(f"               and {q1}")
-                        if reachedEnd:
-                            return self.origin[q0], q1
                         cost1 = self.cost[q0] + (t1-t0) + self.orientationCoeff * abs(i1-i0)
                         if new:
-                            unvisited.append((q1, i1, t1))
+                            if not reachedEnd:
+                                unvisited.append((q1, i1, t1))
                             self.cost[q1] = cost1
                             self.origin[q1] = self.origin[q0] if q0 in self.origin else q0
                         elif self.cost[q1] > cost1:
@@ -241,15 +241,18 @@ class Solver:
                             # and origin
                             self.cost[q1] = cost1
                             self.origin[q1] = self.origin[q0] if q0 in self.origin else q0
+                        if reachedEnd:
+                            solutions.append(q1)
                     except Error as exc:
                         # Stop search for current orientation
                         logger.info(f"Planner failed between {q0}")
                         logger.info(f"                   and {q1}")
                         continue
-                    if finished: break
-                if finished: break
                 # sort unvisited in increasing cost
                 unvisited.remove((q0, i0, t0))
                 unvisited.sort(key = lambda x:self.cost[x[0]])
-            nIter += 1
         # end while not finished
+        if len(solutions) == 0: return None
+        solutions.sort(key = lambda q:self.cost[q])
+        q_final = solutions[0]
+        return (self.origin[q_final], q_final)

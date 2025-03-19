@@ -50,10 +50,13 @@ add_project_dependency(hpp-manipulation REQUIRED)
 
 # Library
 set(${PROJECT_NAME}_HEADERS
+  include/hpp/coverage/cost.hh
   include/hpp/coverage/path.hh
   )
 set(${PROJECT_NAME}_SOURCES
-  src/path.cc)
+  src/cost.cc
+  src/path.cc
+  )
 add_library(${PROJECT_NAME} SHARED ${${PROJECT_NAME}_SOURCES}
                                    ${${PROJECT_NAME}_HEADERS})
 target_link_libraries(${PROJECT_NAME} PUBLIC hpp-manipulation::hpp-manipulation)

@@ -29,6 +29,7 @@
 #ifndef HPP_COVERAGE_PATH_HH
 #define  HPP_COVERAGE_PATH_HH
 
+#include <hpp/coverage/config.hh>
 #include <hpp/core/steering-method/spline.hh>
 #include <hpp/core/path/spline.hh>
 
@@ -40,7 +41,8 @@ typedef core::ConfigurationIn_t ConfigurationIn_t;
 typedef core::value_type value_type ;
 typedef core::size_type size_type ;
 
-class Path {
+/// Helper class to create spline paths in SE(3)
+class HPP_COVERAGE_DLLAPI Path {
 public:
   Path();
   /// Multiply two functions with values in SE(3)
@@ -52,6 +54,7 @@ public:
   /// if this function is defined over \f$[0,T_1]\f$ by
   /// \f[
   /// res(t) = p_1(t) . p_2(\frac{T_2}{T_1}\;t)
+  /// \f]
   PathPtr_t multiply(const PathPtr_t& p1, const PathPtr_t& p2);
 
   /// Create a spline path with values in SE(3)

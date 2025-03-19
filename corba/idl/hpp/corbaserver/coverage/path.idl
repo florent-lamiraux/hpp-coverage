@@ -31,6 +31,8 @@
 
 #include <hpp/common.idl>
 #include <hpp/core_idl/paths.idl>
+#include <hpp/core_idl/path_planners.idl>
+#include <hpp/pinocchio_idl/robots.idl>
 
 module hpp {
   module corbaserver {
@@ -51,7 +53,14 @@ module hpp {
 	/// \param order order of continuity of the derivatives: 0 linear interpolation,
 	///        1 polynomial of degree 3 with zero velocities at beginning and end.
 	hpp::core_idl::Path createSpline(in hpp::floatSeq pose0, in hpp::floatSeq pose1,
-					 in double length, in unsigned long order);
+					 in double length, in unsigned long order)
+	  raises(Error);
+	/// Set cost in Roadmap
+	///
+	/// Set hpp::coverage::Cost as the cost in the given roadmap
+	void setCost(in hpp::core_idl::Roadmap roadmap, in hpp::pinocchio_idl::Device robot,
+		     in string gripperName)
+	  raises(Error);
         /// \}
       };
     }; // interface Path

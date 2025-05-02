@@ -6,6 +6,7 @@
 
   <maintainer email="florent.lamiraux@laas.fr">Florent Lamiraux</maintainer>
 
+  <depend>staubli_tx2_90_support</depend>
   <license>BSD</license>
 
 

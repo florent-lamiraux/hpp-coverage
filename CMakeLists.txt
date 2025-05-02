@@ -47,6 +47,7 @@ project(${PROJECT_NAME} ${PROJECT_ARGS})
 list(APPEND PKG_CONFIG_ADDITIONAL_VARIABLES cmake_plugin)
 
 add_project_dependency(hpp-manipulation REQUIRED)
+add_project_dependency(staubli_tx2_90_support REQUIRED)
 
 # Library
 set(${PROJECT_NAME}_HEADERS

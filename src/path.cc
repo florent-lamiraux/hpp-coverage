@@ -186,7 +186,7 @@ PathPtr_t Path::createSpline(ConfigurationIn_t pose0, ConfigurationIn_t pose1, v
 {
   std::vector<int> empty, one; one.push_back(1);
   Eigen::Matrix<value_type, 7, 0> emptyDeriv;
-  Eigen::Matrix<value_type, 7, 1> zeroDeriv; zeroDeriv.fill(0.);
+  Eigen::Matrix<value_type, 6, 1> zeroDeriv; zeroDeriv.fill(0.);
   switch(order) {
   case 0:
     // Linear interpolation

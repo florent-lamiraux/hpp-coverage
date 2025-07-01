@@ -244,4 +244,10 @@
     <parent link="flange"/>
     <child link="tool"/>
   </joint>
+  <link name="root"/>
+  <joint name="root_joint" type="fixed">
+    <parent link="root"/>
+    <child link="base_link"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
+  </joint>
 </robot>

@@ -37,6 +37,7 @@ namespace coverage{
   typedef pinocchio::Configuration_t Configuration_t;
   typedef pinocchio::matrix3_t matrix3_t;
   typedef pinocchio::vector3_t vector3_t;
+  typedef pinocchio::size_type size_type;
   
   ToolRotationPtr_t ToolRotation::create(const DevicePtr_t& robot, const std::string& gripperName)
   {
@@ -51,8 +52,9 @@ namespace coverage{
 
   value_type ToolRotation::eval(const PathConstPtr_t& path)
   {
-    Configuration_t q1(path->initial());
-    Configuration_t q2(path->end());
+    size_type nq(robot_->model().nq);
+    Configuration_t q1(path->initial().head(nq));
+    Configuration_t q2(path->end().head(nq));
 
     ::pinocchio::framesForwardKinematics(robot_->model(), data_, q1);
     matrix3_t R1(data_.oMf[frameId_].rotation());

@@ -24,7 +24,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.22)
 
 set(CUSTOM_HEADER_DIR hpp/coverage)
 set(CXX_DISABLE_WERROR TRUE)
@@ -35,9 +35,27 @@ set(PROJECT_USE_CMAKE_EXPORT TRUE)
 set(PROJECT_NAME hpp-coverage)
 set(PROJECT_DESCRIPTION "Models and algorithms for trajectory generation in JERICO project")
 
-include(cmake/hpp.cmake)
-include(cmake/idl.cmake)
-include(cmake/python.cmake)
+find_package(jrl-cmakemodules QUIET CONFIG)
+if(jrl-cmakemodules_FOUND)
+  get_property(
+    JRL_CMAKE_MODULES
+    TARGET jrl-cmakemodules::jrl-cmakemodules
+    PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+  message(STATUS "JRL cmakemodules found on system at ${JRL_CMAKE_MODULES}")
+else()
+  message(STATUS "JRL cmakemodules not found. Let's fetch it.")
+  include(FetchContent)
+  FetchContent_Declare(
+    "jrl-cmakemodules"
+    GIT_REPOSITORY "https://github.com/jrl-umi3218/jrl-cmakemodules.git")
+  FetchContent_MakeAvailable("jrl-cmakemodules")
+  FetchContent_GetProperties("jrl-cmakemodules" SOURCE_DIR JRL_CMAKE_MODULES)
+endif()
+
+include("${JRL_CMAKE_MODULES}/hpp.cmake")
+include("${JRL_CMAKE_MODULES}/hpp.cmake")
+include("${JRL_CMAKE_MODULES}/idl.cmake")
+include("${JRL_CMAKE_MODULES}/python.cmake")
 
 option(CORBA "Implement CORBA server and client" ON)
 

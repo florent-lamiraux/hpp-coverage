@@ -34,6 +34,8 @@ omniidl_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/idl
                             ${HPP_CORBASERVER_DATAROOTDIR}/idl)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
+findpython()
+
 set(IDL_SOURCES path)
 foreach(IDL ${IDL_SOURCES})
   generate_idl_cpp(
